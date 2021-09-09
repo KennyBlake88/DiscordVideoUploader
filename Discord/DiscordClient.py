@@ -32,11 +32,8 @@ WHAT IT DOES:
 
 It also has all the functionality of the VideoAnalyzer class because I am tired of that not working!
 
-
-
-
 Author: Kenny Blake
-Version: 1.2.0
+Version: 2.0.0
 """
 class DiscordClient(discord.Client):
 
@@ -57,9 +54,11 @@ class DiscordClient(discord.Client):
         self.testChannel: discord.TextChannel
         self.production = False
         self.counter = 0
+        self.firstRunThrough = True
         self.firstTime = True
         self.firstVideos = {}
         self.stillProcessing = []
+        self.my_task = None
         self.waitingForAcceptance = {}
         self.storageClient = storage.Client()
         self.bucket = self.storageClient.bucket("discord-video-uploader")
@@ -136,17 +135,16 @@ class DiscordClient(discord.Client):
 
             #STOP command
             elif message.clean_content == ";stop":
-                if self.production and self.active:
-                    overwrite = self.productionChannel.overwrites_for(message.guild.default_role)
+                channel = await self.getCorrectChannel()
+                if self.active:
+                    overwrite = channel.overwrites_for(message.guild.default_role)
                     overwrite.send_messages = False
-                    await self.productionChannel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
-                    await self.productionChannel.send("Sorry, this channel is locked while the bot is stopped!")
-                elif self.active:
-                    await self.testChannel.send("Sorry, this channel is locked while the bot is stopped!")
+                    await channel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
+                    await channel.send("Sorry, this channel is locked while the bot is stopped!")
 
                 self.active = False
 
-
+            #END production
             if message.clean_content == ";prod end":
                 self.production = False
 
@@ -157,29 +155,49 @@ class DiscordClient(discord.Client):
             #prod
             elif message.clean_content == ";start prod":
                 self.production = True
-                overwrite = self.productionChannel.overwrites_for(self.get_guild(756025919063326752).default_role)
-                overwrite.send_messages = True
-                await self.productionChannel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
-                deleteMsg = await self.productionChannel.history(limit=10).flatten()
-                for i in deleteMsg:
-                    if(i.clean_content == "Sorry, this channel is locked while the bot is stopped!"):
-                        await i.delete()
-                        
-                self.active = True
-                self.loop.create_task(self.hourChecker())
+                if(self.firstTime):
+                    overwrite = self.productionChannel.overwrites_for(self.get_guild(756025919063326752).default_role)
+                    overwrite.send_messages = True
+                    await self.productionChannel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
+                    deleteMsg = await self.productionChannel.history(limit=10).flatten()
+                    for i in deleteMsg:
+                        if(i.clean_content == "Sorry, this channel is locked while the bot is stopped!"):
+                            await i.delete()
+                            
+                    self.active = True
+                    self.my_task = asyncio.ensure_future(self.hourChecker())
+                    self.firstTime = False
+                else:
+                    self.active = True
+                    self.my_task.cancel()
+                    self.my_task = asyncio.ensure_future(self.hourChecker())
+                    minutes = math.floor((1200 - self.counter) / 60)
+                    seconds = (1200 - self.counter) % 60
+                    await self.productionChannel.send(f"{minutes} minutes, {seconds} seconds until the next video is chosen! Good Luck!")
+                    self.active = True
 
             #test
             elif message.clean_content == ";start":
-                overwrite = self.testChannel.overwrites_for(self.get_guild(756025919063326752).default_role)
-                overwrite.send_messages = True
-                await self.testChannel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
-                deleteMsg = await self.testChannel.history(limit=10).flatten()
-                for i in deleteMsg:
-                    if(i.clean_content == "Sorry, this channel is locked while the bot is stopped!"):
-                        await i.delete()
-                        
-                self.active = True
-                self.loop.create_task(self.hourChecker())
+                if(self.firstTime):
+                    overwrite = self.testChannel.overwrites_for(self.get_guild(756025919063326752).default_role)
+                    overwrite.send_messages = True
+                    await self.testChannel.set_permissions(self.get_guild(756025919063326752).default_role, overwrite=overwrite)
+                    deleteMsg = await self.testChannel.history(limit=10).flatten()
+                    for i in deleteMsg:
+                        if(i.clean_content == "Sorry, this channel is locked while the bot is stopped!"):
+                            await i.delete()
+                            
+                    self.active = True
+                    self.my_task = asyncio.ensure_future(self.hourChecker())
+                    self.firstTime = False
+                else:
+                    self.active = True
+                    self.my_task.cancel()
+                    self.my_task = asyncio.ensure_future(self.hourChecker())
+                    minutes = math.floor((1200 - self.counter) / 60)
+                    seconds = (1200 - self.counter) % 60
+                    await self.testChannel.send(f"{minutes} minutes, {seconds} seconds until the next video is chosen! Good Luck!")
+                    self.active = True
                     
                     
 
@@ -190,6 +208,7 @@ class DiscordClient(discord.Client):
             #reset timer command
             if message.clean_content == ";reset timer":
                 self.counter = 0
+                self.firstTime = True
 
 
             #deletes all the videos from the videos folder to conserve space. 
@@ -264,24 +283,15 @@ class DiscordClient(discord.Client):
         message = None
         authorID = None
         found = False
-        if self.production:
-            try:
-                message = await self.productionChannel.fetch_message(videoID)
-                authorID = message.author.id
-                await message.delete()
-                await self.productionChannel.send(f"{message.author.mention} I've detected your video with the messageid {videoID} as profane. This has been logged.")
-                found = True
-            except discord.errors.NotFound:
-                print(f"A video was found to be nsfw but was deleted before this method could run. It's id was {videoID}.")
-        else:
-            try:
-                message = await self.testChannel.fetch_message(videoID)
-                authorID = message.author.id
-                await message.delete()
-                await self.testChannel.send(f"{message.author.mention} I've detected your video with the messageid {videoID} as profane. This has been logged.")
-                found = True
-            except discord.errors.NotFound:
-                print(f"A video was found to be nsfw but was deleted before this method could run. It's id was {videoID}.")
+        channel = await self.getCorrectChannel()
+        try:
+            message = await channel.fetch_message(videoID)
+            authorID = message.author.id
+            await message.delete()
+            await channel.send(f"{message.author.mention} I've detected your video with the messageid {videoID} as profane. This has been logged.")
+            found = True
+        except discord.errors.NotFound:
+            print(f"A video was found to be nsfw but was deleted before this method could run. It's id was {videoID}.")
         
         if self.currentVideos.get(videoID) != None:
             del self.currentVideos[videoID]
@@ -319,7 +329,12 @@ class DiscordClient(discord.Client):
                         if int(duration[0]) > 0 or int(duration[1]) > 15:
                             await channel.send(f"{message.author.mention}, your video:{attachments[0].filename} was too long! 15 Seconds max!")
                             await message.delete()
+                        elif duration == (0,0):
+                            await channel.send(f"{message.author.mention}, That doesn't seem like a real MP4 File...")
+                            await message.delete()
                         else:
+                            if(message.author.id in self.waitingForAcceptance.keys()):
+                                message.delete()
                             await message.add_reaction("✅")
                             self.currentVideos[message.id] = 0
                             dmChannel = await message.author.create_dm()
@@ -348,7 +363,6 @@ class DiscordClient(discord.Client):
 
         self.loop.create_task(self.analyzeVideo(destination))
         self.stillProcessing.append(destination)
-        print(type(destination))
 
         doc_ref = self.users_ref.document(str(userId))
 
@@ -375,13 +389,9 @@ class DiscordClient(discord.Client):
         del self.waitingForAcceptance[userId]
 
     async def userDenied(self, userId, videoID):
-        print("got here")
-        if self.production:
-            message = await self.productionChannel.fetch_message(videoID)
-            await message.delete()
-        else:
-            message = await self.testChannel.fetch_message(videoID)
-            await message.delete()
+        channel = await self.getCorrectChannel()
+        message = await channel.fetch_message(videoID)
+        await message.delete()
 
         data = {
             u'accepted': False
@@ -391,6 +401,7 @@ class DiscordClient(discord.Client):
         doc_ref.set(data)
 
     async def deleteAllData(self,userId, message):
+        print("userID is deleting all their data")
         doc_ref = self.users_ref.document(str(userId))
         bucket = self.storageClient.bucket('discord-video-uploader')
         data = doc_ref.get().to_dict()
@@ -402,20 +413,19 @@ class DiscordClient(discord.Client):
                         blob = bucket.blob(i)
                         if blob.exists():
                             blob.delete()
-                        if self.production:
-                            try:
-                                message = await self.productionChannel.fetch_message(i)
-                                await message.delete()
-                            except discord.errors.NotFound:
-                                print(f"Message {i} not found")
-                        else:
-                            try:
-                                message = await self.testChannel.fetch_message(i)
-                                await message.delete()
-                            except discord.errors.NotFound:
-                                print(f"Message {i} not found")
+                        channel = await self.getCorrectChannel()
+                        try:
+                            message = await channel.fetch_message(i)
+                            await message.delete()
+                        except discord.errors.NotFound:
+                            print(f"Message {i} not found")
             doc_ref.delete()
-        await message.author.send("Any data associated with you for this project has been deleted.")
+        try:
+            print("got here!")
+            await message.author.send("Any data associated with you for this project has been deleted.")
+        except Exception:
+            print("got here!")
+            await message.channel.send(f"Hey, {message.author.mention}, I can't send you messages. Enable that and try again.")
 
         
     """
@@ -425,84 +435,58 @@ class DiscordClient(discord.Client):
     Author: Kenny Blake
     """      
     async def hourChecker(self):
-        if (self.firstTime):
-            self.firstTime = False
-        else:
-            minutes = math.floor((1200 - self.counter) / 60)
-            seconds = (1200 - self.counter) % 60
-            if self.production:
-                await self.productionChannel.send(f"{minutes} Minutes, {seconds} seconds until the next video is chosen! Good Luck!")
-            else:
-                await self.testChannel.send(f"{minutes} Minutes, {seconds} seconds until the next video is chosen! Good Luck!")
+        channel = await self.getCorrectChannel()
 
         #While the program is running
         while self.active:
             #Just Started
             if self.counter == 0:
-                if(self.production):
-                    await self.productionChannel.send("20 Minutes until the video is chosen. Good luck!")
-                else:
-                    await self.testChannel.send("20 Minutes until the video is chosen. Good luck!")
+                channel = await self.getCorrectChannel()
+                await channel.send("20 Minutes until the video is chosen. Good luck!")
                 self.counter+= 1
 
 
             #5 Minutes
             elif self.counter == 300:
-                if(self.production):
-                    await self.productionChannel.send("15 Minutes until the video is chosen. Good luck!")
-                else:
-                    await self.testChannel.send("15 Minutes until the video is chosen. Good luck!")
+                await channel.send("15 Minutes until the video is chosen. Good luck!")
                 self.counter+= 1
 
 
             #10 Minutes    
             elif self.counter == 600:
-                if(self.production):
-                    await self.productionChannel.send("10 Minutes until the video is chosen. Halfway there!")
-                else:
-                    await self.testChannel.send("10 Minutes until the video is chosen. Halfway there!")
+                await channel.send("10 Minutes until the video is chosen. Halfway there!")
                 self.counter+= 1
 
 
             #15 Minutes
             elif self.counter == 900: 
-                if(self.production):
-                    await self.productionChannel.send("5 Minutes until the video is chosen. Now would be a good time to review what you want uploaded!")
-                else:
-                    await self.testChannel.send("5 Minutes until the video is chosen. Now would be a good time to review what you want uploaded!")
+                await channel.send("5 Minutes until the video is chosen. Now would be a good time to review what you want uploaded!")
                 self.counter+= 1
 
             #19.5 Minutes
             elif self.counter == 1170:
-                if(self.production):
-                    await self.productionChannel.send("30 seconds until the video is chosen. Get those last votes in!")
-                else:
-                    await self.testChannel.send("30 seconds until the video is chosen. Get those last votes in!")
+                await channel.send("30 seconds until the video is chosen. Get those last votes in!")
                 self.counter+= 1
             
             #20 Minutes
             elif self.counter == 1200:
                 mostVoted = await self.getMostVoted()
                 if mostVoted == None:
-                    if (self.production):
-                        await self.productionChannel.send("""No videos were in this set, OR they are still being analyzed by Google.
+                    print(mostVoted)
+                    await channel.send("""No videos were in this set, OR they are still being analyzed by Google.
 Don't worry, any videos from this set still being analyzed will be automatically brought back over to the next one!""")
-                    else:
-                        await self.testChannel.send("""No videos were in this set, OR they are still being analyzed by Google.
-Don't worry, any videos from this set still being analyzed will be automatically brought back over to the next one!""")
-                
+
                 self.counter = 0
 
                 for i in self.currentVideos.keys():
                     if i in self.stillProcessing:
-                        self.currentVideosTemp[i] = self.currentVideosTemp.get(i)
+                        self.currentVideosTemp[i] = self.currentVideos.get(i)
                 self.currentVideos = self.currentVideosTemp
                 self.currentVideosTemp = {}
 
             else:
                 self.counter += 1
-            
-            await asyncio.sleep(.05)
+            await asyncio.sleep(1)
 
 
     async def getMostVoted(self):
@@ -512,40 +496,37 @@ Don't worry, any videos from this set still being analyzed will be automatically
         maximum = 0
         while stillLooking:
             if len(self.currentVideos.keys()) != len(self.stillProcessing):
-                    itsMessage = None
-                    for i in self.currentVideos.keys():
-                        if str(i) in self.stillProcessing:
-                            tempVideos[i] = self.currentVideos.get(i)
-                            del self.currentVideos[i]
-                            break
-                        else:
-                            thisVal = self.currentVideos.get(i, -10000)
-                            if thisVal > maximum:
-                                maximum = thisVal
-                                mostVoted = i
-                        if(self.production):
-                            itsMessage = await self.productionChannel.fetch_message(i)
-                        else:
-                            itsMessage = await self.testChannel.fetch_message(i)
+                print("got here!")
+                itsMessage = None
+                for i in self.currentVideos.keys():
+                    if str(i) in self.stillProcessing:
+                        tempVideos[i] = self.currentVideos.get(i)
+                        del self.currentVideos[i]
+                        continue
+                    else:
+                        thisVal = self.currentVideos.get(i, -10000)
+                        if thisVal > maximum:
+                            maximum = thisVal
+                            mostVoted = i
+                    channel = await self.getCorrectChannel() 
+                    itsMessage = await channel.fetch_message(i)
                     nsfw = await self.ytu.checkDatabaseForNSFWValue(i, itsMessage.author.id, itsMessage.author.display_name)
                     if(nsfw):
                         del self.currentVideos[i]
                     elif nsfw == "Nope":
-                        if self.production:
-                            await self.productionChannel.send(f"{itsMessage.author.mention}, I attempted to upload your video, but I couldn't find your video on my database. Did you do ;forget_i_ever_existed?")
-                        else:
-                            await self.testChannel.send(f"{itsMessage.author.mention}, I attempted to upload your video, but I couldn't find your video on my database. Did you do ;forget_i_ever_existed?")
+                        channel = await self.getCorrectChannel()
+                        await channel.send(f"{itsMessage.author.mention}, I attempted to upload your video, but I couldn't find your video on my database. Did you do ;forget_i_ever_existed?")
+                        stillLooking = False
                     else:
                         stillLooking = False
-                        
-                        if(self.production):
-                            await self.productionChannel.send(f"{itsMessage.author.mention}, your video has won! It's now uploading, you'll see it soon!")
-                        else:
-                            await self.testChannel.send(f"{itsMessage.author.mention}, your video has won! It's now uploading, you'll see it soon!")
+                        mostVoted = i
+                        channel = await self.getCorrectChannel()
+                        await channel.send(f"{itsMessage.author.mention}, your video has won! It's now uploading, you'll see it soon!")
             else:
+                stillLooking = False
                 for i in tempVideos:
                     self.currentVideos[i] = tempVideos.get(i)
-                return mostVoted
+        return mostVoted
                         
 
 
@@ -571,23 +552,26 @@ If you declined the terms, and now want to accept them, type ;forget_i_ever_exis
             self.loop.create_task(self.checkForAcceptAndUploadOrNot(doc, message, fileName))
         else:
             self.waitingForAcceptance[dmChannel.recipient.id] = message.id
-            await message.author.send("""
-                                Hey there! It looks like this is your first time sending a video, just some things you need to accept before you continue:
-                                
-    1. All videos are sent to Google for analysis. 
-            Basically, it just tells me what it thinks it sees in the video, what words it hears being said in the video, and what text appears on the screen during the video.
-            You can learn more about this here:
-            https://cloud.google.com/video-intelligence/
-            
-    2. You also accept that you have received consent from everyone in any videos you send (if applicable), that they will appear in a video that will be sent into this bot, and analyzed. 
-            If someone doesn't want you to send a video of them into this bot, then don't.
+            try:
+                await message.author.send("""
+                                    Hey there! It looks like this is your first time sending a video, just some things you need to accept before you continue:
                                     
-    3. Your discord ID will be placed in a database stating whether you accept or deny these terms. 
-            To delete any data associated with you from the servers/databases running this bot, use the command ;forget_i_ever_existed
-                                
-    Please select ✅ to accept or ❌ to deny these terms.
-                                
-                                """)
+        1. All videos are sent to Google for analysis. 
+                Basically, it just tells me what it thinks it sees in the video, what words it hears being said in the video, and what text appears on the screen during the video.
+                You can learn more about this here:
+                https://cloud.google.com/video-intelligence/
+                
+        2. You also accept that you have received consent from everyone in any videos you send (if applicable), that they will appear in a video that will be sent into this bot, and analyzed. 
+                If someone doesn't want you to send a video of them into this bot, then don't.
+                                        
+        3. Your discord ID will be placed in a database stating whether you accept or deny these terms. 
+                To delete any data associated with you from the servers/databases running this bot, use the command ;forget_i_ever_existed
+                                    
+        Please select ✅ to accept or ❌ to deny these terms.
+                                    
+                                    """)
+            except Exception:
+                await message.channel.send(f"Hey, {message.author.mention}, I can't send you the terms of service. Please make it so I can send you messages!")
 
             self.firstVideos[message.id] = fileName
             messages = await dmChannel.history(before=datetime.now() - timedelta(seconds=1)).flatten()
@@ -639,7 +623,6 @@ If you declined the terms, and now want to accept them, type ;forget_i_ever_exis
                         return
 
         for text in result.annotation_results[0].text_annotations:
-            print(text.text)
             if text.text in self.words:
                 self.loop.create_task(self.removeVideo(videoID))
                 return
@@ -650,10 +633,23 @@ If you declined the terms, and now want to accept them, type ;forget_i_ever_exis
     async def getVideoLength(self, video):
         cap = cv2.VideoCapture(video)
         fps = cap.get(cv2.CAP_PROP_FPS)
-        frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        duration = frameCount / fps
-        cap.release()
-        return (duration / 60, duration % 60)    
+        if fps > 0:
+            frameCount = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frameCount / fps
+            cap.release()
+            return (duration / 60, duration % 60)    
+        else:
+            return (0,0)
+
+
+    """
+    Got tired of writing the if self.production line so I made a function to do it for me :)
+    """
+    async def getCorrectChannel(self) -> discord.TextChannel :
+        if(self.production):
+            return self.productionChannel
+        else:
+            return self.testChannel
 
 """
 i hope u like my code❤️

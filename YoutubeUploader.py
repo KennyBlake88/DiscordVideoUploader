@@ -4,6 +4,7 @@ import json
 import google 
 import googleapiclient.discovery
 import httplib2
+from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
 import os
 from google.cloud import firestore
@@ -26,7 +27,7 @@ class YoutubeUploader():
         self.flow.run_console()
         self.credentials = self.flow.credentials
         self.cjson = json.loads(self.credentials.to_json())
-        self.acces_token = self.cjson.get('token')
+        self.access_token = self.cjson.get('token')
         self.refresh_token = self.cjson.get('refresh_token')
         self.cid = self.cjson.get('client_id')
         self.csecret = self.cjson.get('client_secret')
@@ -39,16 +40,18 @@ class YoutubeUploader():
 
         data = doc_ref.get().to_dict()
 
-        if (data.get('videos').get('videoID')):
-            return True
-        else:
-            #print(f"The video {videoID} would have just uploaded!")
-            print(
-f"""===========================
+        if data != None:
+            if (data.get('videos').get('videoID')):
+                return True
+            else:
+                print(
+    f"""===========================
 {username}: A.K.A {authorID}, is uploading a video! The video id is {videoID}
 ===========================
-            """)
-            #self.uploadVideo(username, videoID, authorID)
+                """)
+                await self.uploadVideo(username, videoID)
+        else:
+            return "Nope"
 
 
 
@@ -58,20 +61,26 @@ f"""===========================
                 request = google.auth.transport.requests.Request()
                 creds.refresh(request)
 
-                youtube = googleapiclient.discovery.build(self.api_service_name, self.api_version, developerKey = self.DEVELOPER_KEY, credentials=creds)
+                youtube = googleapiclient.discovery.build(self.api_service_name, self.api_version, developerKey = self.developer_key, credentials=creds)
             else:
-                youtube = googleapiclient.discovery.build(self.api_service_name, self.api_version, developerKey = self.DEVELOPER_KEY, credentials=creds)
+                youtube = googleapiclient.discovery.build(self.api_service_name, self.api_version, developerKey = self.developer_key, credentials=creds)
 
-            request = youtube.videos().insert(
-                part="snippet",
-                body={
+                request_body= {'snippet':
+                {
                     "title": f"{username} from discord uploaded this to here!",
-                    "description": "Check out my main youtube channel",
+                    "description": """Check out my main youtube channel!
+https://youtube.com/user/brutemold""",
                     "tags": ["michael reeves", "programming"],
                     "category_id": "28"
                 },
-                media_body = MediaFileUpload(options)
-            )
-            response = request.execute()
+                }
 
-            items = response["items"]
+
+            request = youtube.videos().insert(
+            part="snippet",
+            body=request_body,
+            media_body = MediaFileUpload(f'Videos/{videoID}.mp4')
+            )
+
+
+            response = request.execute()

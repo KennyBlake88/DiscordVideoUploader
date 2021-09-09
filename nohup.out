@@ -1,0 +1,41 @@
+Please visit this URL to authorize this application: https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=620611828215-s4dhhe6rhnmkasuoar81p4m0ce80apeo.apps.googleusercontent.com&redirect_uri=urn%3Aietf%3Awg%3Aoauth%3A2.0%3Aoob&scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fyoutube.force-ssl&state=oEDm2oRGbIc9sF46ozUHA9cdPp40HZ&prompt=consent&access_type=offline
+Enter the authorization code: Traceback (most recent call last):
+  File "Driver.py", line 35, in <module>
+    main()
+  File "Driver.py", line 22, in main
+    discordClient = DiscordClient()
+  File "/home/kenny/DiscordVideoUploader/Discord/DiscordClient.py", line 69, in __init__
+    self.ytu = YoutubeUploader()
+  File "/home/kenny/DiscordVideoUploader/YoutubeUploader.py", line 27, in __init__
+    self.flow.run_console()
+  File "/home/kenny/.local/share/virtualenvs/DiscordVideoUploader-Kn3MncBk/lib/python3.7/site-packages/google_auth_oauthlib/flow.py", line 411, in run_console
+    code = input(authorization_code_message)
+OSError: [Errno 9] Bad file descriptor
+Loading .env environment variables...
+Launching subshell in virtual environment...
+Traceback (most recent call last):
+  File "/home/kenny/.local/bin/pipenv", line 10, in <module>
+    sys.exit(cli())
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 829, in __call__
+    return self.main(*args, **kwargs)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 782, in main
+    rv = self.invoke(ctx)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 1259, in invoke
+    return _process_result(sub_ctx.command.invoke(sub_ctx))
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 1066, in invoke
+    return ctx.invoke(self.callback, **ctx.params)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 610, in invoke
+    return callback(*args, **kwargs)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/decorators.py", line 73, in new_func
+    return ctx.invoke(f, obj, *args, **kwargs)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/click/core.py", line 610, in invoke
+    return callback(*args, **kwargs)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/cli/command.py", line 434, in shell
+    pypi_mirror=state.pypi_mirror,
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/core.py", line 2387, in do_shell
+    shell.fork_compat(*fork_args)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/shells.py", line 122, in fork_compat
+    c.interact(escape_character=None)
+  File "/home/kenny/.local/lib/python3.7/site-packages/pipenv/vendor/pexpect/pty_spawn.py", line 788, in interact
+    mode = tty.tcgetattr(self.STDIN_FILENO)
+termios.error: (25, 'Inappropriate ioctl for device')
