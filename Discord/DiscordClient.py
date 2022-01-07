@@ -126,7 +126,7 @@ class DiscordClient(discord.Client):
             
             #shuts down the entire bot
             elif message.clean_content == ";terminate":
-                await message.channel.send("I really hope you meant to do this cause I can't be fucked to write interactivity to this bot. Shutting the whole bot down.")
+                await message.channel.send("I really hope you meant to do this cause I can't be botheed to write interactivity to this bot. Shutting the whole bot down.")
                 exit()
 
             #ping command
